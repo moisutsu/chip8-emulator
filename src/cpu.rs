@@ -19,7 +19,7 @@ impl Cpu {
             i: 0,
             delay: 0,
             sound: 0,
-            pc: 0,
+            pc: 0x200,
             sp: 0,
             stack: [0; 16],
             ram: [0; 0xFFF]
@@ -58,5 +58,14 @@ impl Cpu {
         file.read_to_end(&mut buf)?;
         self.ram[0x200..0x200+buf.len()].copy_from_slice(&buf);
         Ok(())
+    }
+    /// pcが指す16ビットの命令コードをフェッチし,4ビットずつにわけて返す
+    pub fn fetch_instruction_code(&self) -> (u8, u8, u8, u8) {
+        let (b1, b2): (u8, u8) = (self.ram[self.pc as usize], self.ram[(self.pc + 1) as usize]);
+        let v1 = b1 >> 4;
+        let v2 = b1 & 0b00001111;
+        let v3 = b2 >> 4;
+        let v4 = b2 & 0b00001111;
+        (v1, v2, v3, v4)
     }
 }
