@@ -15,9 +15,12 @@ fn main() {
     cpu.load_rom(&argv[1]).unwrap();
     let sleep_time = time::Duration::from_millis(1000);
     loop {
-        match cpu.fetch_instruction_code() {
-            _ => (),
-        }
+        let next_pc = match cpu.fetch_instruction_code() {
+            (0x0, 0x0, 0xE, 0xE) => cpu.ret(),
+            (0x1, n1, n2, n3) => cpu.jp_addr(n1, n2, n3),
+            _ => chip8::cpu::NextPc::Next,
+        };
+        cpu.set_pc(next_pc);
         cpu.print_registers();
         thread::sleep(sleep_time);
     }

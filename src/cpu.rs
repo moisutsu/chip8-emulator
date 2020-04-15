@@ -12,6 +12,12 @@ pub struct Cpu {
     ram: [u8; 0xFFF],
 }
 
+pub enum NextPc {
+    Next,
+    Skip,
+    Jump(u16),
+}
+
 impl Cpu {
     pub fn new() -> Cpu {
         Cpu {
@@ -22,7 +28,7 @@ impl Cpu {
             pc: 0x200,
             sp: 0,
             stack: [0; 16],
-            ram: [0; 0xFFF]
+            ram: [0; 0xFFF],
         }
     }
     pub fn init_ram(&mut self) {
@@ -47,16 +53,18 @@ impl Cpu {
         self.ram[..fontpreset.len()].copy_from_slice(&fontpreset);
     }
     pub fn print_registers(&self) {
-        for i in 0..15 {
+        for i in 0..16 {
             print!("V{:X}: {:X}, ", i, self.v[i]);
         }
-        println!("VF: {:X}", self.v[15]);
+        print!("I: {:X}, ", self.i);
+        print!("PC: {:X}, ", self.pc);
+        println!("SP: {:X}", self.sp);
     }
     pub fn load_rom(&mut self, file_path: &str) -> std::io::Result<()> {
         let mut file = File::open(file_path)?;
         let mut buf = Vec::new();
         file.read_to_end(&mut buf)?;
-        self.ram[0x200..0x200+buf.len()].copy_from_slice(&buf);
+        self.ram[0x200..0x200 + buf.len()].copy_from_slice(&buf);
         Ok(())
     }
     /// pcが指す16ビットの命令コードをフェッチし,4ビットずつにわけて返す
@@ -67,5 +75,26 @@ impl Cpu {
         let v3 = b2 >> 4;
         let v4 = b2 & 0b00001111;
         (v1, v2, v3, v4)
+    }
+    pub fn set_pc(&mut self, next_pc: NextPc) {
+        match next_pc {
+            NextPc::Next => {
+                self.pc += 2;
+            }
+            NextPc::Skip => {
+                self.pc += 4;
+            }
+            NextPc::Jump(addr) => self.pc = addr,
+        }
+    }
+    // 命令セットの定義
+    pub fn ret(&mut self) -> NextPc {
+        let next_pc = self.stack[self.sp as usize];
+        self.sp -= 1;
+        NextPc::Jump(next_pc)
+    }
+    pub fn jp_addr(&mut self, n1: u8, n2: u8, n3: u8) -> NextPc {
+        let next_pc = ((n1 as u16) << 8) + ((n2 as u16) << 4) + n3 as u16;
+        NextPc::Jump(next_pc)
     }
 }
