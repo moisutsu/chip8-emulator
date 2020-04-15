@@ -1,3 +1,6 @@
+use std::fs::File;
+use std::io::Read;
+
 pub struct Cpu {
     v: [u8; 16],
     i: u16,
@@ -48,5 +51,12 @@ impl Cpu {
             print!("V{:X}: {:X}, ", i, self.v[i]);
         }
         println!("VF: {:X}", self.v[15]);
+    }
+    pub fn load_rom(&mut self, file_path: &str) -> std::io::Result<()> {
+        let mut file = File::open(file_path)?;
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf)?;
+        self.ram[0x200..0x200+buf.len()].copy_from_slice(&buf);
+        Ok(())
     }
 }
