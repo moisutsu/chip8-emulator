@@ -108,6 +108,7 @@ impl Cpu {
     }
     pub fn call_addr(&mut self, n1: u8, n2: u8, n3: u8) -> NextPc {
         self.sp += 1;
+        self.stack[self.sp as usize] = self.pc;
         let next_pc = ((n1 as u16) << 8) + ((n2 as u16) << 4) + n3 as u16;
         NextPc::Jump(next_pc)
     }
