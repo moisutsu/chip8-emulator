@@ -1,3 +1,4 @@
+use rand;
 use std::fs::File;
 use std::io::Read;
 
@@ -60,6 +61,14 @@ impl Cpu {
         print!("PC: {:X}, ", self.pc);
         println!("SP: {:X}", self.sp);
     }
+    pub fn print_instruction_code(&self) {
+        let (b1, b2): (u8, u8) = (self.ram[self.pc as usize], self.ram[(self.pc + 1) as usize]);
+        let v1 = b1 >> 4;
+        let v2 = b1 & 0b00001111;
+        let v3 = b2 >> 4;
+        let v4 = b2 & 0b00001111;
+        println!("命令コード: {:X}{:X}{:X}{:X}", v1, v2, v3, v4);
+    }
     pub fn load_rom(&mut self, file_path: &str) -> std::io::Result<()> {
         let mut file = File::open(file_path)?;
         let mut buf = Vec::new();
@@ -96,5 +105,133 @@ impl Cpu {
     pub fn jp_addr(&mut self, n1: u8, n2: u8, n3: u8) -> NextPc {
         let next_pc = ((n1 as u16) << 8) + ((n2 as u16) << 4) + n3 as u16;
         NextPc::Jump(next_pc)
+    }
+    pub fn call_addr(&mut self, n1: u8, n2: u8, n3: u8) -> NextPc {
+        self.sp += 1;
+        let next_pc = ((n1 as u16) << 8) + ((n2 as u16) << 4) + n3 as u16;
+        NextPc::Jump(next_pc)
+    }
+    pub fn se_vx_byte(&self, x: u8, k1: u8, k2: u8) -> NextPc {
+        if self.v[x as usize] == (k1 << 4) + k2 {
+            NextPc::Skip
+        } else {
+            NextPc::Next
+        }
+    }
+    pub fn sne_vx_byte(&self, x: u8, k1: u8, k2: u8) -> NextPc {
+        if self.v[x as usize] != (k1 << 4) + k2 {
+            NextPc::Skip
+        } else {
+            NextPc::Next
+        }
+    }
+    pub fn se_vx_vy(&self, x: u8, y: u8) -> NextPc {
+        if self.v[x as usize] == self.v[y as usize] {
+            NextPc::Skip
+        } else {
+            NextPc::Next
+        }
+    }
+    pub fn ld_vx_byte(&mut self, x: u8, k1: u8, k2: u8) -> NextPc {
+        self.v[x as usize] = (k1 << 4) + k2;
+        NextPc::Next
+    }
+    pub fn add_vx_byte(&mut self, x: u8, k1: u8, k2: u8) -> NextPc {
+        self.v[x as usize] = self.v[x as usize] + (k1 << 4) + k2;
+        NextPc::Next
+    }
+    pub fn ld_vx_vy(&mut self, x: u8, y: u8) -> NextPc {
+        self.v[x as usize] = self.v[y as usize];
+        NextPc::Next
+    }
+    pub fn or_vx_vy(&mut self, x: u8, y: u8) -> NextPc {
+        self.v[x as usize] = self.v[x as usize] | self.v[y as usize];
+        NextPc::Next
+    }
+    pub fn and_vx_vy(&mut self, x: u8, y: u8) -> NextPc {
+        self.v[x as usize] &= self.v[y as usize];
+        NextPc::Next
+    }
+    pub fn xor_vx_vy(&mut self, x: u8, y: u8) -> NextPc {
+        self.v[x as usize] ^= self.v[y as usize];
+        NextPc::Next
+    }
+    pub fn add_vx_vy(&mut self, x: u8, y: u8) -> NextPc {
+        // 16bitに変換してから255より大きいかを判定する
+        let retval: u16 = self.v[x as usize] as u16 + self.v[y as usize] as u16;
+        self.v[0xF] = if retval > 255 { 1 } else { 0 };
+        // as u8 より下位8bitのみ保持
+        self.v[x as usize] = retval as u8;
+        NextPc::Next
+    }
+    pub fn sub_vx_vy(&mut self, x: u8, y: u8) -> NextPc {
+        self.v[0xF] = if self.v[x as usize] > self.v[y as usize] {
+            1
+        } else {
+            0
+        };
+        // u8 - u8 で負になる場合の代入は未実装
+        if self.v[x as usize] >= self.v[y as usize] {
+            self.v[x as usize] = self.v[x as usize] - self.v[y as usize];
+        }
+        NextPc::Next
+    }
+    pub fn shr_vx_vy(&mut self, x: u8, _y: u8) -> NextPc {
+        self.v[0xF] = if self.v[x as usize] % 2 == 1 { 1 } else { 0 };
+        self.v[x as usize] >>= 1;
+        NextPc::Next
+    }
+    pub fn subn_vx_vy(&mut self, x: u8, y: u8) -> NextPc {
+        self.v[0xF] = if self.v[y as usize] > self.v[x as usize] {
+            1
+        } else {
+            0
+        };
+        // u8 - u8 が負になる場合は未実装
+        if self.v[y as usize] >= self.v[x as usize] {
+            self.v[x as usize] = self.v[y as usize] - self.v[x as usize];
+        }
+        NextPc::Next
+    }
+    pub fn shl_vx_vy(&mut self, x: u8, _y: u8) -> NextPc {
+        self.v[0xF] = if self.v[x as usize] >= 128 { 1 } else { 0 };
+        self.v[x as usize] <<= 1;
+        NextPc::Next
+    }
+    pub fn sne_vx_vy(&self, x: u8, y: u8) -> NextPc {
+        if self.v[x as usize] != self.v[y as usize] {
+            NextPc::Skip
+        } else {
+            NextPc::Next
+        }
+    }
+    pub fn ld_i_addr(&mut self, n1: u8, n2: u8, n3: u8) -> NextPc {
+        self.i = ((n1 as u16) << 8) + ((n2 as u16) << 4) + n3 as u16;
+        NextPc::Next
+    }
+    pub fn jp_v0_addr(&self, n1: u8, n2: u8, n3: u8) -> NextPc {
+        let next_pc: u16 = ((n1 as u16) << 8) + ((n2 as u16) << 4) + n3 as u16 + self.v[0x0] as u16;
+        NextPc::Jump(next_pc)
+    }
+    pub fn rnd_vx_byte(&mut self, x: u8, k1: u8, k2: u8) -> NextPc {
+        let kk: u8 = (k1 << 4) + k2;
+        self.v[x as usize] = kk & rand::random::<u8>();
+        NextPc::Next
+    }
+    pub fn ld_vx_dt(&mut self, x: u8) -> NextPc {
+        self.v[x as usize] = self.delay;
+        NextPc::Next
+    }
+    pub fn ld_dt_vx(&mut self, x: u8) -> NextPc {
+        self.delay = self.v[x as usize];
+        NextPc::Next
+    }
+    pub fn ld_st_vx(&mut self, x: u8) -> NextPc {
+        self.sound = self.v[x as usize];
+        NextPc::Next
+    }
+    pub fn add_i_vx(&mut self, x: u8) -> NextPc {
+        self.i += self.v[x as usize] as u16;
+        NextPc::Next
     }
 }
